@@ -1,0 +1,141 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ─────────────── Usuário e perfil ───────────────
+
+model Usuario {
+  id                     Int       @id @default(autoincrement())
+  nome                   String
+  email                  String    @unique
+  senhaHash              String
+  curso                  String?
+  // Quando o estudante autorizou o uso da localização (null = não autorizou)
+  consentiuLocalizacaoEm DateTime?
+  criadoEm               DateTime  @default(now())
+  atualizadoEm           DateTime  @updatedAt
+  linhaId Int?
+  linha   Linha?  @relation(fields: [linhaId], references: [id])
+  viagens Viagem[]
+
+  compromissos Compromisso[]
+  leituras     LeituraLocalizacao[]
+}
+
+// ─────────────── Rotina acadêmica ───────────────
+
+enum TipoCompromisso {
+  AULA
+  OUTRO
+}
+
+model Compromisso {
+  id          Int             @id @default(autoincrement())
+  titulo      String
+  tipo        TipoCompromisso @default(AULA)
+  diaSemana   Int             // 0 = domingo ... 6 = sábado
+  inicioMin   Int             // minutos desde 00:00 (ex.: 14:00 = 840)
+  fimMin      Int
+  usuarioId   Int
+  localId     Int?
+
+  usuario Usuario @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+  local   Local?  @relation(fields: [localId], references: [id])
+
+  @@index([usuarioId, diaSemana])
+}
+
+// ─────────────── Locais e atividades ───────────────
+
+model Local {
+  id        Int     @id @default(autoincrement())
+  nome      String
+  descricao String?
+  latitude  Float
+  longitude Float
+
+  compromissos Compromisso[]
+  atividades   Atividade[]
+}
+
+enum CategoriaAtividade {
+  ESTUDO
+  BIBLIOTECA
+  ALIMENTACAO
+  SECRETARIA
+  OUTRO
+}
+
+model Atividade {
+  id             Int                @id @default(autoincrement())
+  titulo         String
+  descricao      String?
+  categoria      CategoriaAtividade
+  duracaoMin     Int                // duração estimada em minutos
+  abreMin        Int?               // horário de abertura (null = sem restrição)
+  fechaMin       Int?               // horário de fechamento
+  ativa          Boolean            @default(true)
+  localId        Int
+
+  local Local @relation(fields: [localId], references: [id])
+}
+
+// ─────────────── Mobilidade e geolocalização colaborativa ───────────────
+
+enum TipoOperador {
+  PREFEITURA
+  EMPRESA_PRIVADA
+  TRANSPORTE_URBANO
+}
+
+model Linha {
+  id           Int          @id @default(autoincrement())
+  codigo       String       @unique
+  nome         String
+  cidadeOrigem String?
+  operador     TipoOperador
+  ativa        Boolean      @default(true)
+
+  leituras LeituraLocalizacao[]
+  viagens  Viagem[]
+  usuarios Usuario[]
+}
+
+// Período em que o aluno está no ônibus compartilhando localização
+model Viagem {
+  id          Int       @id @default(autoincrement())
+  iniciadaEm  DateTime  @default(now())
+  encerradaEm DateTime? // null = viagem em andamento
+  usuarioId   Int
+  linhaId     Int
+
+  usuario  Usuario              @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+  linha    Linha                @relation(fields: [linhaId], references: [id])
+  leituras LeituraLocalizacao[]
+
+  @@index([linhaId, encerradaEm])
+}
+
+model LeituraLocalizacao {
+  id             Int      @id @default(autoincrement())
+  latitude       Float
+  longitude      Float
+  precisaoMetros Float?   // precisão informada pelo GPS do celular
+  registradaEm   DateTime // quando o celular mediu
+  recebidaEm     DateTime @default(now()) // quando o servidor recebeu
+  usuarioId      Int
+  linhaId        Int
+  viagemId       Int
+  viagem         Viagem   @relation(fields: [viagemId], references: [id], onDelete: Cascade)
+
+  usuario Usuario @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+  linha   Linha   @relation(fields: [linhaId], references: [id])
+
+  // Acelera a consulta mais comum: "leituras recentes desta linha"
+  @@index([linhaId, registradaEm])
+}

@@ -1,0 +1,262 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>BUS.AI — Coletor de localização</title>
+  <style>
+    :root { --fundo: #f4f6f8; --cartao: #fff; --texto: #1b2430; --suave: #5c6b7a; --primaria: #1f6feb; --perigo: #c62828; --ok: #2e7d32; }
+    * { box-sizing: border-box; }
+    body { margin: 0; font-family: system-ui, sans-serif; background: var(--fundo); color: var(--texto); }
+    main { max-width: 480px; margin: 0 auto; padding: 16px; }
+    h1 { font-size: 1.3rem; margin: 8px 0 4px; }
+    .aviso { font-size: .85rem; color: var(--suave); margin-bottom: 16px; }
+    section { background: var(--cartao); border-radius: 12px; padding: 16px; margin-bottom: 12px; box-shadow: 0 1px 3px rgba(0,0,0,.08); }
+    label { display: block; font-size: .9rem; margin: 8px 0 4px; }
+    input, select { width: 100%; padding: 10px; font-size: 1rem; border: 1px solid #c8d0d8; border-radius: 8px; }
+    button { width: 100%; padding: 14px; font-size: 1.05rem; border: 0; border-radius: 8px; margin-top: 12px; color: #fff; background: var(--primaria); }
+    button.perigo { background: var(--perigo); }
+    button:disabled { opacity: .5; }
+    .oculto { display: none; }
+    .linha { display: flex; justify-content: space-between; padding: 6px 0; border-bottom: 1px solid #eef1f4; font-size: .95rem; }
+    .linha span:first-child { color: var(--suave); }
+    #mensagem { font-size: .9rem; min-height: 1.2em; }
+    .erro { color: var(--perigo); }
+    .sucesso { color: var(--ok); }
+    .check { display: flex; gap: 8px; align-items: flex-start; font-size: .9rem; }
+    .check input { width: auto; margin-top: 3px; }
+  </style>
+</head>
+<body>
+<main>
+  <h1>BUS.AI — Coletor de localização</h1>
+  <p class="aviso">Instrumento de coleta para os testes de campo do TCC. Envia a sua localização
+    <strong>somente</strong> entre "Estou no ônibus" e "Desci". Mantenha esta página aberta e a tela ligada.</p>
+
+  <!-- 1. Login -->
+  <section id="telaLogin">
+    <label for="email">E-mail</label>
+    <input id="email" type="email" autocomplete="username" />
+    <label for="senha">Senha</label>
+    <input id="senha" type="password" autocomplete="current-password" />
+    <button id="btnEntrar">Entrar</button>
+  </section>
+
+  <!-- 2. Preparação da viagem -->
+  <section id="telaPreparo" class="oculto">
+    <label for="linha">Ônibus</label>
+    <select id="linha"></select>
+    <label for="intervalo">Intervalo de envio</label>
+    <select id="intervalo">
+      <option value="5">5 segundos</option>
+      <option value="10">10 segundos</option>
+      <option value="15">15 segundos</option>
+    </select>
+    <label class="check">
+      <input id="consentimento" type="checkbox" />
+      Autorizo o uso da minha localização pelo BUS.AI durante a viagem, para estimar a posição do ônibus.
+      Posso revogar a qualquer momento.
+    </label>
+    <button id="btnEmbarcar">Estou no ônibus</button>
+  </section>
+
+  <!-- 3. Viagem em andamento -->
+  <section id="telaViagem" class="oculto">
+    <div class="linha"><span>Viagem</span><span id="vViagem">—</span></div>
+    <div class="linha"><span>Leituras enviadas</span><span id="vEnviadas">0</span></div>
+    <div class="linha"><span>Aguardando envio</span><span id="vFila">0</span></div>
+    <div class="linha"><span>Precisão do GPS</span><span id="vPrecisao">—</span></div>
+    <div class="linha"><span>Último envio</span><span id="vUltimo">—</span></div>
+    <div class="linha"><span>Tela sempre ligada</span><span id="vWakeLock">—</span></div>
+    <button id="btnDesci" class="perigo">Desci do ônibus</button>
+  </section>
+
+  <p id="mensagem"></p>
+</main>
+
+<script>
+  // Mesma origem do backend: as rotas da API são chamadas com caminhos relativos
+  let token = null;
+  let viagemId = null;
+  let fila = [];            // leituras ainda não enviadas (ex.: sem sinal na estrada)
+  let ultimaLeitura = null; // posição mais recente entregue pelo GPS
+  let ultimoEnfileirado = 0; // horário (ms) da última leitura colocada na fila
+  let enviadas = 0;
+  let idObservador = null;
+  let idTemporizador = null;
+  let travaTela = null;
+
+  const $ = (id) => document.getElementById(id);
+
+  function mostrar(tela) {
+    for (const id of ["telaLogin", "telaPreparo", "telaViagem"]) $(id).classList.toggle("oculto", id !== tela);
+  }
+
+  function mensagem(texto, tipo = "") {
+    $("mensagem").textContent = texto;
+    $("mensagem").className = tipo;
+  }
+
+  async function api(metodo, caminho, corpo) {
+    const resposta = await fetch(caminho, {
+      method: metodo,
+      headers: {
+        ...(corpo !== undefined ? { "Content-Type": "application/json" } : {}),
+        ...(token ? { Authorization: "Bearer " + token } : {}),
+      },
+      body: corpo !== undefined ? JSON.stringify(corpo) : undefined,
+    });
+    const texto = await resposta.text();
+    let dados = null;
+    try { dados = texto ? JSON.parse(texto) : null; } catch { /* resposta sem JSON */ }
+    return { status: resposta.status, dados };
+  }
+
+  // ───── 1. Login ─────
+  $("btnEntrar").onclick = async () => {
+    mensagem("Entrando...");
+    const r = await api("POST", "/auth/login", { email: $("email").value.trim(), senha: $("senha").value });
+    if (r.status !== 200) return mensagem(r.dados?.erro ?? "Falha no login", "erro");
+    token = r.dados.token;
+
+    const linhas = await api("GET", "/linhas");
+    $("linha").innerHTML = "";
+    for (const l of linhas.dados.linhas) {
+      const opcao = document.createElement("option");
+      opcao.value = l.id;
+      opcao.textContent = l.nome;
+      if (l.id === r.dados.usuario.linhaId) opcao.selected = true;
+      $("linha").appendChild(opcao);
+    }
+    $("consentimento").checked = Boolean(r.dados.usuario.consentiuLocalizacaoEm);
+    mensagem("");
+    mostrar("telaPreparo");
+  };
+
+  // ───── 2. Embarque ─────
+  $("btnEmbarcar").onclick = async () => {
+    if (!$("consentimento").checked) return mensagem("Marque a autorização para continuar.", "erro");
+    if (!("geolocation" in navigator)) return mensagem("Este navegador não oferece GPS.", "erro");
+
+    await api("POST", "/usuarios/me/consentimento-localizacao");
+    const r = await api("POST", "/viagens", { linhaId: Number($("linha").value) });
+    if (r.status !== 201) return mensagem(r.dados?.erro ?? "Não foi possível iniciar a viagem", "erro");
+
+    viagemId = r.dados.viagem.id;
+    enviadas = 0;
+    fila = [];
+    ultimaLeitura = null;
+    ultimoEnfileirado = 0;
+    $("vViagem").textContent = "#" + viagemId;
+    mostrar("telaViagem");
+    mensagem("Aguardando o GPS...");
+
+    // Recebe posições do GPS continuamente, com alta precisão
+    // (mantém o GPS ativo e mostra a precisão atual)
+    idObservador = navigator.geolocation.watchPosition(
+      registrarPosicao,
+      (erro) => mensagem("GPS: " + erro.message, "erro"),
+      { enableHighAccuracy: true, maximumAge: 0, timeout: 20000 },
+    );
+
+    // A cada intervalo, coloca uma leitura nova na fila e tenta enviar
+    const intervaloMs = Number($("intervalo").value) * 1000;
+    idTemporizador = setInterval(() => {
+      if (ultimaLeitura && ultimaLeitura.registradaEm > ultimoEnfileirado) {
+        enfileirar(ultimaLeitura);
+        enviarFila();
+      } else {
+        // Parado, o celular pode não gerar posição nova sozinho: pede uma medição agora
+        navigator.geolocation.getCurrentPosition(
+          (p) => { registrarPosicao(p); enfileirar(ultimaLeitura); enviarFila(); },
+          () => enviarFila(),
+          { enableHighAccuracy: true, maximumAge: 0, timeout: intervaloMs },
+        );
+      }
+    }, intervaloMs);
+
+    manterTelaLigada();
+  };
+
+  function registrarPosicao(p) {
+    ultimaLeitura = {
+      latitude: p.coords.latitude,
+      longitude: p.coords.longitude,
+      precisaoMetros: p.coords.accuracy ?? null,
+      registradaEm: p.timestamp,
+    };
+    $("vPrecisao").textContent = Math.round(p.coords.accuracy) + " m";
+  }
+
+  // Coloca a leitura na fila, sem repetir a mesma medição
+  function enfileirar(leitura) {
+    if (!leitura || leitura.registradaEm <= ultimoEnfileirado) return;
+    fila.push(leitura);
+    ultimoEnfileirado = leitura.registradaEm;
+  }
+
+  async function enviarFila() {
+    $("vFila").textContent = fila.length;
+    if (fila.length === 0) return;
+    const lote = fila.slice(0, 100);
+    try {
+      const r = await api("POST", `/viagens/${viagemId}/leituras`, { leituras: lote });
+      if (r.status === 201) {
+        fila = fila.slice(lote.length);
+        enviadas += r.dados.recebidas;
+        $("vEnviadas").textContent = enviadas;
+        $("vUltimo").textContent = new Date().toLocaleTimeString("pt-BR");
+        mensagem("Enviando normalmente.", "sucesso");
+      } else if (r.status === 409) {
+        encerrarColeta();
+        mensagem("A viagem foi encerrada pelo servidor.", "erro");
+      } else {
+        mensagem("Servidor respondeu " + r.status + ": " + (r.dados?.erro ?? ""), "erro");
+      }
+    } catch {
+      // Sem internet: as leituras continuam na fila e vão no próximo envio
+      mensagem("Sem conexão. " + fila.length + " leitura(s) guardada(s) para enviar depois.", "erro");
+    }
+    $("vFila").textContent = fila.length;
+  }
+
+  // Impede a tela de apagar (com a tela apagada, o navegador pausa o GPS)
+  async function manterTelaLigada() {
+    try {
+      travaTela = await navigator.wakeLock.request("screen");
+      $("vWakeLock").textContent = "sim";
+    } catch {
+      $("vWakeLock").textContent = "não suportado — não deixe a tela apagar";
+    }
+  }
+  // O navegador libera a trava quando a página sai de foco; ao voltar, pede de novo
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "visible" && viagemId) manterTelaLigada();
+  });
+
+  function encerrarColeta() {
+    if (idObservador !== null) navigator.geolocation.clearWatch(idObservador);
+    clearInterval(idTemporizador);
+    idObservador = null;
+    travaTela?.release?.();
+  }
+
+  // ───── 3. Desembarque ─────
+  $("btnDesci").onclick = async () => {
+    enfileirar(ultimaLeitura);
+    await enviarFila(); // tenta enviar o que ficou na fila antes de encerrar
+    encerrarColeta();
+    await api("POST", `/viagens/${viagemId}/encerrar`);
+    const pendentes = fila.length;
+    viagemId = null;
+    mostrar("telaPreparo");
+    mensagem(
+      pendentes > 0
+        ? `Viagem encerrada. Atenção: ${pendentes} leitura(s) não puderam ser enviadas.`
+        : `Viagem encerrada. ${enviadas} leitura(s) enviadas.`,
+      pendentes > 0 ? "erro" : "sucesso",
+    );
+  };
+</script>
+</body>
+</html>

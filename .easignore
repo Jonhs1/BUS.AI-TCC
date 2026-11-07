@@ -1,0 +1,44 @@
+# Arquivos que o EAS Build NÃO envia para a nuvem ao gerar o APK.
+# Quando este arquivo existe, o EAS deixa de usar o .gitignore: as regras dele precisam estar aqui também.
+
+# O APK só precisa da pasta mobile/. O backend, os documentos e os dados ficam de fora
+# (o backend também tem pastas com atalhos simbólicos que o Windows não consegue copiar).
+backend/
+docs/
+
+# Ferramentas de IA e editores
+.agents/
+.claude/
+.windsurf/
+**/.agents/
+**/.windsurf/
+skills-lock.json
+.vscode/
+
+# Mesmas regras do mobile/.gitignore
+node_modules/
+**/node_modules/
+mobile/.expo/
+mobile/dist/
+mobile/web-build/
+mobile/ios/
+mobile/android/
+mobile/expo-env.d.ts
+.kotlin/
+*.orig.*
+.metro-health-check*
+*.tsbuildinfo
+*.log
+.DS_Store
+
+# Chaves e certificados: nunca enviar
+*.jks
+*.p8
+*.p12
+*.key
+*.pem
+*.mobileprovision
+
+# Endereço do túnel e outros dados locais: nunca vão para o build
+**/.env
+**/.env*.local

@@ -1,0 +1,10 @@
+node_modules/
+.env
+/src/generated/prisma
+.agents/
+.claude/
+.windsurf/
+skills-lock.json
+# Dados brutos dos testes de campo (trajetórias reais): ficam fora do Git, guardados junto com as planilhas.
+# Os resumos gerados pela análise (analise-*.csv) não têm coordenadas e podem ser versionados.
+scripts/resultados/campo-*.csv
