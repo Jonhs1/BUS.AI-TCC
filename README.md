@@ -24,7 +24,7 @@ com a localização compartilhada pelos próprios estudantes.
 
 ---
 
-## 📌 Sobre o projeto
+## Sobre o projeto
 
 Muitos estudantes da UEMG Passos vêm de outras cidades em ônibus de prefeituras ou de empresas, e a rotina deles
 depende de horários que nem sempre se encaixam: intervalos entre aulas, espera pelo ônibus, trajetos longos.
@@ -42,7 +42,7 @@ O **BUS.AI** junta duas coisas para apoiar essa rotina:
 
 ---
 
-## ✨ Funcionalidades
+## Funcionalidades
 
 | Requisito | O que o estudante faz no app |
 |---|---|
@@ -57,7 +57,7 @@ ser desligada a qualquer momento. O mapa mostra só a posição **combinada** do
 
 ---
 
-## 🧠 Como funciona
+## Como funciona
 
 ### Recomendação de atividades
 
@@ -98,7 +98,7 @@ o horário em que foi medida.
 
 ---
 
-## 🧱 Arquitetura
+## Arquitetura
 
 ```mermaid
 flowchart LR
@@ -136,7 +136,7 @@ BUS.ai/
 
 ---
 
-## 🚀 Como rodar
+## Como rodar
 
 Você vai precisar de **Node.js LTS**, **PostgreSQL** e do app **Expo Go** no celular.
 
@@ -219,7 +219,7 @@ Cobrem o cálculo do intervalo livre, a viabilidade e a pontuação das recomend
 
 ---
 
-## 📊 Avaliação
+## Avaliação
 
 O projeto segue a metodologia **Design Science Research**: construir o artefato e avaliá-lo. A avaliação separa
 claramente três tipos de evidência:
@@ -234,7 +234,7 @@ Dados simulados e dados de campo **nunca são misturados**.
 
 ---
 
-## ⚠️ Limitações conhecidas
+## Limitações conhecidas
 
 - **Coleta no iPhone só com o app aberto:** no Android, o app é instalado como APK e envia a localização com a tela bloqueada; no iPhone, ele roda pelo Expo Go, que só envia com o app na tela (o envio em segundo plano no iPhone exigiria uma conta paga da Apple).
 - **Mapa embutido só no iPhone:** no Android, ele exigiria uma chave paga do Google Maps; o painel e o botão "Abrir no app de mapas" continuam funcionando.
@@ -244,7 +244,7 @@ Dados simulados e dados de campo **nunca são misturados**.
 
 ---
 
-## 📚 Documentação
+## Documentação
 
 | Documento | Conteúdo |
 |---|---|
@@ -256,11 +256,12 @@ Dados simulados e dados de campo **nunca são misturados**.
 
 <div align="center">
 
-### 👥 Equipe
+### Equipe
 
 **Kauan Alexandre Dias Silva** · **João Victor Miranda Oliveira**
 
-Orientação: **Prof.ª Vania Borges**
+Orientação: **Prof.º Luiz Fernando Moura Piantino** -
+Coorientação: **Prof.ª Vania Borges**
 
 Universidade do Estado de Minas Gerais · Unidade Passos · 2026
 
