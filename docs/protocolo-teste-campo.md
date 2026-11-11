@@ -227,6 +227,12 @@ As funções da análise têm testes automatizados em `src/geolocalizacao/analis
 |---|---|---|---|---|---|---|
 | 04/11/2026, 22:11–23:49 | **Teste piloto** | UEMG → cidade de origem | 1 | App | Não | 32 leituras em 97,4 min (esperadas ~1.169 a cada 5 s); disponibilidade de 4,4%; maior atraso de rede de 1.508 s. Indica que o app ficou fora da tela na maior parte da viagem, quando o Expo Go pausa a coleta. Motivou a regra "app aberto e tela ligada" da seção 5.3 |
 
+| 05/11/2026, 20:20–20:48 (leituras); encerramento manual às 21:00 | **Ocorrência** (viagem não planejada pelo protocolo) | Trajeto a confirmar | 1 (APK, segundo plano) | APK (segundo plano) | Não | Tela bloqueada, app não foi fechado e "Desci do ônibus" não foi tocado. A viagem ficou aberta no servidor, sem limite de tempo. Última leitura medida às 20:48 (335 leituras no total). Não houve leituras depois das 21h, e nada precisou ser descartado. O encerramento às 21h00 foi registrado manualmente no banco com o horário informado pelo participante; **não é um horário medido pelo app** |
+
 O teste piloto **não entra** nas métricas de erro nem na comparação entre 1, 2 e 3 aparelhos: ele documenta a
 limitação da coleta com o app fora da tela.
+
+A ocorrência acima mostra que a coleta em segundo plano **não tem fim automático**. O encerramento depende só do
+toque em "Desci do ônibus". Enquanto a correção não for implementada, o procedimento da seção 5.4 é obrigatório:
+conferir, ao final de cada viagem, que nenhum aparelho ficou com a coleta ativa.
 
