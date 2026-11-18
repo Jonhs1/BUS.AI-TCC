@@ -111,7 +111,7 @@ flowchart LR
 | **App** | React Native, Expo SDK 58, Expo Router, Expo Location, React Native Maps, Expo Secure Store |
 | **Backend** | Node.js, Express 5, Zod (validação), JWT (autenticação), bcrypt (senhas) |
 | **Dados** | PostgreSQL, Prisma ORM |
-| **Testes** | `node:test` com 28 testes automatizados (recomendação, estimativa de posição e análise dos testes de campo) |
+| **Testes** | `node:test` com 29 testes automatizados (recomendação, estimativa de posição e análise dos testes de campo) |
 
 ### Estrutura do repositório
 
