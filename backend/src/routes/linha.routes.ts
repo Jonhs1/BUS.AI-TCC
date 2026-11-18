@@ -41,7 +41,12 @@ linhaRoutes.get("/:id/posicao", async (req, res) => {
     where: {
       linhaId: linha.id,
       registradaEm: { gte: new Date(agoraMs - JANELA_SEGUNDOS * 1000) },
-      viagem: { encerradaEm: null },
+      // A expiração também vale para consultas públicas do mapa.
+      // Uma viagem sem encerramento explícito não deve continuar visível após 3 horas.
+      viagem: {
+        encerradaEm: null,
+        iniciadaEm: { gte: new Date(agoraMs - 180 * 60 * 1000) },
+      },
     },
   });
 

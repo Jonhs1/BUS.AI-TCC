@@ -87,7 +87,18 @@ viagemRoutes.get("/atual", async (req, res) => {
     orderBy: { iniciadaEm: "desc" },
   });
 
-  res.json({ viagem: viagem && !expirou(viagem) ? viagem : null });
+  // Fecha explicitamente viagens vencidas ao consultar o estado atual.
+  // Isso evita que um registro antigo permaneça aberto indefinidamente no banco.
+  if (viagem && expirou(viagem)) {
+    await prisma.viagem.updateMany({
+      where: { id: viagem.id, encerradaEm: null },
+      data: { encerradaEm: new Date() },
+    });
+    res.json({ viagem: null });
+    return;
+  }
+
+  res.json({ viagem });
 });
 
 // POST /viagens/:id/encerrar — "Desci do ônibus"
