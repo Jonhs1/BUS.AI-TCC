@@ -7,6 +7,7 @@ import { compromissoRoutes } from "./routes/compromisso.routes";
 import { recomendacaoRoutes } from "./routes/recomendacao.routes";
 import { linhaRoutes } from "./routes/linha.routes";
 import { viagemRoutes } from "./routes/viagem.routes";
+import { assistenteRoutes } from "./routes/assistente.routes";
 
 if (!process.env.JWT_SECRET) {
   throw new Error("JWT_SECRET não definido no arquivo .env");
@@ -31,6 +32,7 @@ app.use("/compromissos", compromissoRoutes);
 app.use("/recomendacoes", recomendacaoRoutes);
 app.use("/linhas", linhaRoutes);
 app.use("/viagens", viagemRoutes);
+app.use("/assistente", assistenteRoutes);
 
 // Tratamento de erros inesperados: registra no terminal e não expõe detalhes ao cliente
 app.use((err: unknown, req: Request, res: Response, next: NextFunction) => {
