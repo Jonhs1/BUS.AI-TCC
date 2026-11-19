@@ -1,5 +1,5 @@
 import { useEffect, useRef } from "react";
-import { Linking, Platform, Pressable, StyleSheet, Text, View } from "react-native";
+import { Alert, Linking, Platform, Pressable, StyleSheet, Text, View } from "react-native";
 import { router } from "expo-router";
 import MapView, { Circle, Marker } from "react-native-maps";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -63,15 +63,20 @@ export default function Mapa() {
     }
   }, [posicao]);
 
-  // Alternativa ao mapa embutido: abre a posição no app de mapas do celular
-  function abrirNoAppDeMapas() {
-    if (!posicao) return;
-    const { latitude, longitude } = posicao;
-    const url = Platform.select({
-      ios: `maps:0,0?q=${latitude},${longitude}`,
-      default: `geo:0,0?q=${latitude},${longitude}(Ônibus)`,
-    });
-    Linking.openURL(url);
+  // Google Maps oferece URL HTTPS universal, sem chave de API e sem depender do esquema geo:.
+  // Se ainda não há posição do ônibus, permite abrir apenas a referência da universidade,
+  // com rótulo distinto para não confundi-la com a localização do veículo.
+  async function abrirNoAppDeMapas() {
+    const coordenadas = posicao ?? UEMG;
+    const { latitude, longitude } = coordenadas;
+    const url = Platform.OS === "ios"
+      ? `maps:0,0?q=${latitude},${longitude}`
+      : `https://www.google.com/maps/search/?api=1&query=${latitude}%2C${longitude}`;
+    try {
+      await Linking.openURL(url);
+    } catch {
+      Alert.alert("Não foi possível abrir o mapa", "Confira se há um navegador ou aplicativo de mapas disponível no dispositivo.");
+    }
   }
 
   // Sem ônibus escolhido não há o que mostrar
@@ -189,7 +194,15 @@ export default function Mapa() {
             No Android, o mapa embutido não está disponível nesta versão do app. Use “Abrir no app de mapas” para ver
             a posição do ônibus no Google Maps.
           </Text>
-          {posicao ? <Botao rotulo="Abrir no app de mapas" onPress={abrirNoAppDeMapas} /> : null}
+          {!posicao ? (
+            <Text style={[estilos.suave, { textAlign: "center" }]}>
+              Ainda não há posição confiável do ônibus. O botão abaixo abre apenas a UEMG como referência, não a posição do veículo.
+            </Text>
+          ) : null}
+          <Botao
+            rotulo={posicao ? "Abrir ônibus no Google Maps" : "Abrir UEMG no Google Maps"}
+            onPress={abrirNoAppDeMapas}
+          />
         </View>
       )}
     </View>
