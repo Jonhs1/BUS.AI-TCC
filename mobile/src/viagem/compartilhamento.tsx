@@ -153,7 +153,7 @@ export function ProvedorViagem({ children }: { children: ReactNode }) {
     enviando.current = true;
     const lote = fila.current.slice(0, MAX_POR_LOTE);
     try {
-      const r = await api<{ recebidas: number }>(`/viagens/${v.id}/leituras`, {
+      const r = await api<{ recebidas: number; descartadas?: number }>(`/viagens/${v.id}/leituras`, {
         metodo: "POST",
         corpo: { leituras: lote },
       });
@@ -161,7 +161,7 @@ export function ProvedorViagem({ children }: { children: ReactNode }) {
       fila.current = fila.current.slice(lote.length);
       setEnviadas((n) => n + r.recebidas);
       setUltimoEnvio(new Date());
-      setAviso(null);
+      setAviso(r.descartadas ? `${r.descartadas} leitura(s) fora do período foram ignoradas.` : null);
     } catch (e) {
       if (e instanceof ErroApi && e.status === 409) {
         // Viagem encerrada ou expirada no servidor (ex.: consentimento revogado no Perfil)
