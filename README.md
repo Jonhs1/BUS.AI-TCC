@@ -51,6 +51,7 @@ O **BUS.AI** junta duas coisas para apoiar essa rotina:
 | 💡 **Recomendação inteligente** | Vê o tempo livre e as atividades sugeridas, com justificativa. Um modo de simulação permite testar qualquer dia e hora. |
 | 📡 **Geolocalização colaborativa** | Toca em **"Estou no ônibus"** e passa a compartilhar a posição durante a viagem. Funciona mesmo com falhas de sinal. |
 | 🗺️ **Mapa** | Acompanha a posição estimada do ônibus, com a margem de incerteza e quantos colegas estão compartilhando. |
+| ✨ **Assistente IA** | Apoio à decisão usando as atividades viáveis e tutoria de estudos por Gemini (serviço opcional e dependente da cota gratuita). |
 
 **Privacidade em primeiro lugar:** a localização só é usada com autorização explícita, apenas durante a viagem e pode
 ser desligada a qualquer momento. O mapa mostra só a posição **combinada** do ônibus, nunca a de um aluno.
@@ -111,7 +112,8 @@ flowchart LR
 | **App** | React Native, Expo SDK 58, Expo Router, Expo Location, React Native Maps, Expo Secure Store |
 | **Backend** | Node.js, Express 5, Zod (validação), JWT (autenticação), bcrypt (senhas) |
 | **Dados** | PostgreSQL, Prisma ORM |
-| **Testes** | `node:test` com 29 testes automatizados (recomendação, estimativa de posição e análise dos testes de campo) |
+| **IA opcional** | Gemini REST API no backend, habilitação explícita e cotas locais; recomendação continua baseada em regras |
+| **Testes** | `node:test` com 41 testes automatizados no código (recomendação, estimativa GPS, validação de leituras, autenticação, limites da IA e análise de campo) |
 
 ### Estrutura do repositório
 
@@ -239,8 +241,11 @@ Dados simulados e dados de campo **nunca são misturados**.
 - **Coleta no iPhone só com o app aberto:** no Android, o app é instalado como APK e envia a localização com a tela bloqueada; no iPhone, ele roda pelo Expo Go, que só envia com o app na tela (o envio em segundo plano no iPhone exigiria uma conta paga da Apple).
 - **Mapa embutido só no iPhone:** no Android, ele exigiria uma chave paga do Google Maps; o painel e o botão "Abrir no app de mapas" continuam funcionando.
 - **GPS em lugar fechado:** a precisão pode passar de 100 m, e essas leituras são descartadas.
-- **Recomendação por regras:** o sistema não usa aprendizado de máquina; as regras e os pesos estão declarados e podem ser explicados.
+- **Recomendação de atividades por regras:** o cálculo de viabilidade e pontuação não é aprendizado de máquina; o assistente Gemini generativo é uma funcionalidade complementar e opcional.
 - **Backend local:** nos testes, a API roda no computador da equipe e é acessada por um túnel.
+- **Coleta GPS:** a aplicação para de coletar localmente quando detecta o prazo de 3 horas; sem eventos do sistema operacional, a interrupção pode ocorrer na próxima execução da tarefa ou abertura do app. O servidor também expira viagens, mas não depende de um agendador automático.
+- **Horários e deslocamentos:** horários de atendimento cadastrados no seed precisam de confirmação e o deslocamento é uma estimativa geométrica, não um trajeto de pedestres calculado por API.
+- **Gemini gratuito:** a equipe deve manter o projeto de API no Free Tier, sem billing. Os limites de requisições locais não são uma garantia financeira.
 
 ---
 
@@ -251,6 +256,7 @@ Dados simulados e dados de campo **nunca são misturados**.
 | 📄 [`docs/API.md`](docs/API.md) | Todas as rotas da API, com exemplos de requisição e resposta |
 | 🚌 [`docs/protocolo-teste-campo.md`](docs/protocolo-teste-campo.md) | Como executar e analisar o teste de campo |
 | 📱 [`mobile/README.md`](mobile/README.md) | Detalhes do app: telas, parâmetros e limitações |
+| ✨ [`docs/assistente-ia-limites.md`](docs/assistente-ia-limites.md) | Habilitação, cotas e limites da IA |
 
 ---
 
