@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { ActivityIndicator, Keyboard, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
+import { useRef, useState } from "react";
+import { ActivityIndicator, Keyboard, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useSessao } from "@/auth/sessao";
 import { cores } from "@/theme";
@@ -9,6 +9,17 @@ type Modo = "decidir" | "estudar";
 export default function Assistente() {
   const { api } = useSessao();
   const margens = useSafeAreaInsets();
+  const rolagem = useRef<ScrollView>(null);
+  const posicaoCartao = useRef(0);
+  const posicoesCampos = useRef({ conteudo: 0, pergunta: 0 });
+
+  function focarCampo(campo: "conteudo" | "pergunta") {
+    // Depois da animação do teclado, posiciona a caixa de texto acima dele.
+    setTimeout(() => {
+      const y = posicaoCartao.current + posicoesCampos.current[campo] - 80;
+      rolagem.current?.scrollTo({ y: Math.max(0, y), animated: true });
+    }, 300);
+  }
   const [modo, setModo] = useState<Modo>("decidir");
   const [pergunta, setPergunta] = useState("");
   const [conteudo, setConteudo] = useState("");
@@ -46,10 +57,13 @@ export default function Assistente() {
   }
 
   return (
+    <KeyboardAvoidingView style={estilos.tela} behavior={Platform.OS === "ios" ? "padding" : undefined}>
     <ScrollView
+      ref={rolagem}
       style={estilos.tela}
       contentContainerStyle={[estilos.conteudo, { paddingTop: margens.top + 18 }]}
       keyboardShouldPersistTaps="handled"
+      keyboardDismissMode={Platform.OS === "ios" ? "interactive" : "on-drag"}
     >
       <Text style={estilos.sobretitulo}>BUS.AI • Assistente inteligente</Text>
       <Text style={estilos.titulo}>Como posso te ajudar?</Text>
@@ -73,7 +87,7 @@ export default function Assistente() {
         ))}
       </View>
 
-      <View style={estilos.cartao}>
+      <View style={estilos.cartao} onLayout={(evento) => { posicaoCartao.current = evento.nativeEvent.layout.y; }}>
         <Text style={estilos.tituloCartao}>
           {modo === "decidir" ? "Seu próximo passo" : "Seu tutor de estudos"}
         </Text>
@@ -96,6 +110,8 @@ export default function Assistente() {
               placeholderTextColor={cores.textoSuave}
               textAlignVertical="top"
               accessibilityLabel="Material de estudo"
+              onLayout={(evento) => { posicoesCampos.current.conteudo = evento.nativeEvent.layout.y; }}
+              onFocus={() => focarCampo("conteudo")}
             />
           </>
         ) : null}
@@ -113,6 +129,8 @@ export default function Assistente() {
           placeholderTextColor={cores.textoSuave}
           textAlignVertical="top"
           accessibilityLabel="Pergunta ao assistente"
+          onLayout={(evento) => { posicoesCampos.current.pergunta = evento.nativeEvent.layout.y; }}
+          onFocus={() => focarCampo("pergunta")}
         />
         <TouchableOpacity
           style={[estilos.botao, (carregando || pergunta.trim().length < 3) && estilos.desabilitado]}
@@ -144,6 +162,7 @@ export default function Assistente() {
         Esta versão não salva o histórico do assistente.
       </Text>
     </ScrollView>
+    </KeyboardAvoidingView>
   );
 }
 
