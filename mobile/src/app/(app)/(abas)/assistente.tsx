@@ -1,5 +1,5 @@
 import { useRef, useState } from "react";
-import { ActivityIndicator, Keyboard, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
+import { ActivityIndicator, Keyboard, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View, type ScrollViewInstance } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useSessao } from "@/auth/sessao";
 import { cores } from "@/theme";
@@ -9,7 +9,7 @@ type Modo = "decidir" | "estudar";
 export default function Assistente() {
   const { api } = useSessao();
   const margens = useSafeAreaInsets();
-  const rolagem = useRef<ScrollView>(null);
+  const rolagem = useRef<ScrollViewInstance>(null);
   const posicaoCartao = useRef(0);
   const posicoesCampos = useRef({ conteudo: 0, pergunta: 0 });
 
