@@ -205,6 +205,9 @@ if (MODO_SEGUNDO_PLANO) {
 // Retorna false quando o usuário não autorizou "Permitir o tempo todo".
 // Nesse caso o aplicativo ainda pode compartilhar com a tela ligada.
 export async function garantirPermissaoSegundoPlano(): Promise<boolean> {
+  if (!(await Location.hasServicesEnabledAsync())) {
+    throw new Error("O GPS do Android está desligado. Ative a localização do aparelho antes de iniciar a viagem.");
+  }
   const primeiro = await Location.requestForegroundPermissionsAsync();
   if (!primeiro.granted) throw new Error("Sem permissão de localização. Libere nas Configurações do celular.");
 
