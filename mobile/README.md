@@ -55,8 +55,12 @@ Todos os comandos abaixo são executados **dentro da pasta `mobile`**.
 
 ## APK para Android (EAS Build)
 
-No Android, o app também pode ser instalado como APK. Nesse modo a localização é enviada
-**em segundo plano**, com a tela bloqueada, até o aluno tocar em "Desci do ônibus".
+No Android, o app também pode ser instalado como APK. Com permissão **"Permitir o tempo todo"**,
+o aplicativo tenta enviar localização **em segundo plano**, com notificação de serviço.
+Se a permissão for negada ou o serviço não iniciar, oferece **coleta com a tela ligada**,
+para não bloquear o compartilhamento por completo. O cartão da viagem indica o modo ativo.
+Se a tarefa estiver ativa mas não registrar leituras, o aluno pode selecionar
+**"Usar com tela ligada"**. Esse modo alternativo exige manter o BUS.AI aberto.
 No iPhone, o app continua sendo usado pelo Expo Go, com a tela ligada.
 
 1. Instalar as dependências da coleta em segundo plano (uma vez):
@@ -117,6 +121,17 @@ Definidos em `src/viagem/parametros.ts`:
 
 Sem internet, as leituras ficam numa fila no celular e são enviadas em lote quando a conexão volta.
 Cada leitura leva o horário em que o celular a mediu.
+
+## Diagnóstico no Android: GPS e Google Maps
+
+1. Confirme que o APK foi **recompilado após a alteração do código**. Reiniciar o Expo ou backend não atualiza o APK instalado.
+2. No telefone, ative **Localização** e conceda ao BUS.AI a permissão de localização precisa. Para segundo plano, conceda **Permitir o tempo todo**, quando disponível.
+3. No Android, em **Configurações → Apps → BUS.AI → Bateria**, evite restrições de energia durante o teste. As opções variam por fabricante.
+4. Inicie uma viagem e observe no cartão os valores **Leituras enviadas**, **Aguardando envio** e **Precisão do GPS**. O envio depende de internet, servidor e precisão GPS.
+5. Se o cartão continuar em zero, toque em **Usar com tela ligada** e mantenha o aplicativo aberto. Isso diferencia falha de tarefa em segundo plano de falha geral de GPS/rede.
+6. Na aba **Mapa**, o botão **Abrir ônibus no Google Maps** aparece quando a API retorna posição confiável. Sem posição, o botão **Abrir UEMG no Google Maps** abre somente a referência universitária, sem fingir que seja o ônibus.
+
+O Android usa uma **URL HTTPS oficial do Google Maps**, sem chave de API. Abrir o mapa externo não depende de conseguir exibir o mapa integrado no aplicativo. A chamada pode abrir o Google Maps instalado ou o navegador padrão.
 
 ## Limitações conhecidas
 

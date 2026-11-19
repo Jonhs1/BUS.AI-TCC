@@ -33,6 +33,7 @@ export type Viagem = {
 type Compartilhamento = {
   viagem: Viagem | null; // viagem aberta no backend (pode existir sem coleta, ao reabrir o app)
   coletando: boolean; // GPS ligado e enviando
+  segundoPlanoAtivo: boolean; // true apenas quando a tarefa Android está em funcionamento
   enviadas: number;
   naFila: number; // medidas que ainda não chegaram ao servidor (ex.: sem sinal na estrada)
   precisaoM: number | null;
@@ -41,6 +42,7 @@ type Compartilhamento = {
   embarcar: () => Promise<void>;
   continuar: () => Promise<void>;
   desembarcar: () => Promise<void>;
+  usarComTelaLigada: () => Promise<void>;
 };
 
 const Contexto = createContext<Compartilhamento | null>(null);
@@ -50,6 +52,7 @@ export function ProvedorViagem({ children }: { children: ReactNode }) {
   const { api, usuario } = useSessao();
   const [viagem, setViagem] = useState<Viagem | null>(null);
   const [coletando, setColetando] = useState(false);
+  const [segundoPlanoAtivo, setSegundoPlanoAtivo] = useState(false);
   const [enviadas, setEnviadas] = useState(0);
   const [naFila, setNaFila] = useState(0);
   const [precisaoM, setPrecisaoM] = useState<number | null>(null);
@@ -91,6 +94,7 @@ export function ProvedorViagem({ children }: { children: ReactNode }) {
       // A tarefa parou sozinha (servidor encerrou a viagem ou a sessão expirou)
       setColetando(false);
       if (r.aviso) definirViagem(null);
+      setSegundoPlanoAtivo(false);
     }
   }, []);
 
@@ -99,17 +103,20 @@ export function ProvedorViagem({ children }: { children: ReactNode }) {
     if (!usuario || !MODO_SEGUNDO_PLANO) return;
     lerResumo()
       .then((r) => {
-        if (r.ativa) setColetando(true);
+        if (r.ativa) {
+          setColetando(true);
+          setSegundoPlanoAtivo(true);
+        }
       })
       .catch(() => {});
   }, [usuario]);
 
   useEffect(() => {
-    if (!MODO_SEGUNDO_PLANO || !coletando) return;
+    if (!MODO_SEGUNDO_PLANO || !coletando || !segundoPlanoAtivo) return;
     atualizarResumo();
     const relogio = setInterval(atualizarResumo, 2000);
     return () => clearInterval(relogio);
-  }, [coletando, atualizarResumo]);
+  }, [coletando, segundoPlanoAtivo, atualizarResumo]);
 
   const pararColeta = useCallback(() => {
     observador.current?.remove();
@@ -237,25 +244,43 @@ export function ProvedorViagem({ children }: { children: ReactNode }) {
     setColetando(true);
   }, [enviarFila]);
 
+  // No APK Android, começa em segundo plano quando autorizado. Se o sistema não
+  // permitir iniciar o serviço, usa a coleta com tela ligada como alternativa.
+  const iniciarAndroid = useCallback(async (v: Viagem, permitirSegundoPlano: boolean, manterFila = false) => {
+    if (permitirSegundoPlano) {
+      try {
+        await iniciarSegundoPlano(v, manterFila);
+        setSegundoPlanoAtivo(true);
+        setColetando(true);
+        return;
+      } catch (erro) {
+        // Não deixar uma tentativa incompleta de tarefa GPS rodando em paralelo.
+        await pararSegundoPlano().catch(() => {});
+      }
+    }
+    await iniciarColeta();
+    setSegundoPlanoAtivo(false);
+    setAviso("Coleta com tela ligada: mantenha o BUS.AI aberto durante a viagem. Para usar com a tela bloqueada, permita localização o tempo todo nas configurações do Android.");
+  }, [iniciarColeta]);
+
   // Botão "Estou no ônibus"
   const embarcar = useCallback(async () => {
     setAviso(null);
     // Antes de criar a viagem: sem permissão de GPS, não adianta abrir
-    if (MODO_SEGUNDO_PLANO) await garantirPermissaoSegundoPlano();
-    else await garantirPermissao();
+    const segundoPlanoPermitido = MODO_SEGUNDO_PLANO ? await garantirPermissaoSegundoPlano() : false;
+    if (!MODO_SEGUNDO_PLANO) await garantirPermissao();
     const r = await api<{ viagem: Viagem }>("/viagens", { metodo: "POST" }); // usa o ônibus do perfil
     definirViagem(r.viagem);
     if (MODO_SEGUNDO_PLANO) {
-      await iniciarSegundoPlano(r.viagem);
       setEnviadas(0);
       setNaFila(0);
       setUltimoEnvio(null);
       setPrecisaoM(null);
-      setColetando(true);
+      await iniciarAndroid(r.viagem, segundoPlanoPermitido);
     } else {
       await iniciarColeta();
     }
-  }, [api, iniciarColeta]);
+  }, [api, iniciarColeta, iniciarAndroid]);
 
   // Viagem que ficou aberta: volta a enviar sem criar outra
   const continuar = useCallback(async () => {
@@ -263,9 +288,13 @@ export function ProvedorViagem({ children }: { children: ReactNode }) {
     if (MODO_SEGUNDO_PLANO) {
       const v = viagemRef.current;
       if (!v) return;
-      await garantirPermissaoSegundoPlano();
-      await iniciarSegundoPlano(v, true); // mantém o que ainda não foi enviado
-      setColetando(true);
+      if (coletaExpirou(new Date(v.iniciadaEm).getTime())) {
+        definirViagem(null);
+        setAviso("Esta viagem expirou após 3 horas. Inicie uma nova.");
+        return;
+      }
+      const permitido = await garantirPermissaoSegundoPlano();
+      await iniciarAndroid(v, permitido, true);
       return;
     }
     const v = viagemRef.current;
@@ -276,14 +305,23 @@ export function ProvedorViagem({ children }: { children: ReactNode }) {
     }
     await garantirPermissao();
     await iniciarColeta();
-  }, [iniciarColeta]);
+  }, [iniciarColeta, iniciarAndroid]);
+
+  // No APK, permite recuperar a coleta imediatamente se a tarefa Android não fornecer posições.
+  const usarComTelaLigada = useCallback(async () => {
+    if (!MODO_SEGUNDO_PLANO || !segundoPlanoAtivo || !viagemRef.current) return;
+    await pararSegundoPlano();
+    setSegundoPlanoAtivo(false);
+    await iniciarColeta();
+    setAviso("Modo com tela ligada ativado. Mantenha o aplicativo aberto durante a viagem.");
+  }, [segundoPlanoAtivo, iniciarColeta]);
 
   // Botão "Desci do ônibus"
   const desembarcar = useCallback(async () => {
     const v = viagemRef.current;
     if (!v) return;
     let pendentes: number;
-    if (MODO_SEGUNDO_PLANO) {
+    if (MODO_SEGUNDO_PLANO && segundoPlanoAtivo) {
       // Para a tarefa, tenta mandar o que sobrou na fila e guarda o total para o cartão
       const final = await pararSegundoPlano();
       pendentes = final.pendentes;
@@ -302,12 +340,13 @@ export function ProvedorViagem({ children }: { children: ReactNode }) {
       // Sem internet: o servidor encerra sozinho depois de 3 horas
     }
     definirViagem(null);
+    setSegundoPlanoAtivo(false);
     setAviso(pendentes > 0 ? `Viagem encerrada. ${pendentes} leitura(s) não puderam ser enviadas.` : null);
-  }, [api, enviarFila, pararColeta]);
+  }, [api, enviarFila, pararColeta, segundoPlanoAtivo]);
 
   const valor = useMemo(
-    () => ({ viagem, coletando, enviadas, naFila, precisaoM, ultimoEnvio, aviso, embarcar, continuar, desembarcar }),
-    [viagem, coletando, enviadas, naFila, precisaoM, ultimoEnvio, aviso, embarcar, continuar, desembarcar],
+    () => ({ viagem, coletando, segundoPlanoAtivo, enviadas, naFila, precisaoM, ultimoEnvio, aviso, embarcar, continuar, desembarcar, usarComTelaLigada }),
+    [viagem, coletando, segundoPlanoAtivo, enviadas, naFila, precisaoM, ultimoEnvio, aviso, embarcar, continuar, desembarcar, usarComTelaLigada],
   );
 
   return <Contexto.Provider value={valor}>{children}</Contexto.Provider>;

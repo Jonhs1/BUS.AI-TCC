@@ -10,7 +10,7 @@ import { INTERVALO_ENVIO_S, MODO_SEGUNDO_PLANO, PRECISAO_MAXIMA_M, useViagem } f
 // Cartão "Estou no ônibus" da tela Início: o lado do app na geolocalização colaborativa
 export function CartaoViagem() {
   const { usuario } = useSessao();
-  const { viagem, coletando, enviadas, naFila, precisaoM, ultimoEnvio, aviso, embarcar, continuar, desembarcar } =
+  const { viagem, coletando, segundoPlanoAtivo, enviadas, naFila, precisaoM, ultimoEnvio, aviso, embarcar, continuar, desembarcar, usarComTelaLigada } =
     useViagem();
   const [ocupado, setOcupado] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
@@ -40,7 +40,7 @@ export function CartaoViagem() {
           <Text style={estilos.titulo}>Compartilhando localização</Text>
         </View>
         <Text style={estilos.texto}>
-          {MODO_SEGUNDO_PLANO
+          {segundoPlanoAtivo
             ? "Pode bloquear a tela: o envio continua até você tocar em “Desci do ônibus”. Uma notificação mostra que está ligado."
             : "Deixe o app aberto na tela até descer."}{" "}
           Ninguém vê sua posição, só a do ônibus.
@@ -59,7 +59,7 @@ export function CartaoViagem() {
             valor={ultimoEnvio ? ultimoEnvio.toLocaleTimeString("pt-BR") : "—"}
           />
         </View>
-        <Text style={estilos.detalhe}>Uma posição a cada {INTERVALO_ENVIO_S} s · viagem #{viagem?.id} · {MODO_SEGUNDO_PLANO ? "segundo plano" : "tela ligada"}</Text>
+        <Text style={estilos.detalhe}>Uma posição a cada {INTERVALO_ENVIO_S} s · viagem #{viagem?.id} · {segundoPlanoAtivo ? "segundo plano" : "tela ligada"}</Text>
         {gpsImpreciso ? (
           <Text style={estilos.alerta}>
             GPS impreciso (mais de {PRECISAO_MAXIMA_M} m): o servidor ignora essas leituras. Em lugar fechado é comum; perto
@@ -68,6 +68,14 @@ export function CartaoViagem() {
         ) : null}
 
         {mensagem ? <Text style={estilos.aviso}>{mensagem}</Text> : null}
+        {MODO_SEGUNDO_PLANO && segundoPlanoAtivo && enviadas === 0 && naFila === 0 ? (
+          <View style={{ gap: 6 }}>
+            <Text style={estilos.alerta}>
+              Se o GPS não registrar posições depois de alguns instantes, experimente usar a coleta com o aplicativo aberto.
+            </Text>
+            <Botao tipo="secundario" rotulo="Usar com tela ligada" carregando={ocupado} onPress={() => executar(usarComTelaLigada)} />
+          </View>
+        ) : null}
         <Botao tipo="secundario" rotulo="Desci do ônibus" carregando={ocupado} onPress={() => executar(desembarcar)} />
       </View>
     );
