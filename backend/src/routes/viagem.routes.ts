@@ -3,16 +3,14 @@ import { z } from "zod";
 import { prisma } from "../lib/prisma";
 import { autenticar } from "../middlewares/autenticar";
 import { errosDeValidacao } from "../lib/validacao";
+import { separarLeiturasPorPeriodo, DURACAO_MAXIMA_VIAGEM_MIN } from "../geolocalizacao/validar-leituras";
 
 export const viagemRoutes = Router();
 
 viagemRoutes.use(autenticar);
 
-// Viagem não encerrada expira sozinha após este tempo (proteção de privacidade)
-export const DURACAO_MAXIMA_VIAGEM_MIN = 180;
-
-// Tolerância para diferença entre o relógio do celular e o do servidor
-const TOLERANCIA_RELOGIO_MS = 2 * 60 * 1000;
+// Viagens vencidas são ignoradas no mapa e encerradas ao consultar a viagem ou enviar leituras.
+export { DURACAO_MAXIMA_VIAGEM_MIN } from "../geolocalizacao/validar-leituras";
 
 const idSchema = z.coerce.number().int().positive();
 
@@ -162,20 +160,18 @@ viagemRoutes.post("/:id/leituras", async (req, res) => {
     return;
   }
 
-  // Privacidade: só aceita posições medidas DURANTE a viagem
-  const inicio = viagem.iniciadaEm.getTime() - TOLERANCIA_RELOGIO_MS;
-  const limite = Date.now() + TOLERANCIA_RELOGIO_MS;
-  const { leituras } = resultado.data;
-  const foraDoPeriodo = leituras.some(
-    (l) => l.registradaEm.getTime() < inicio || l.registradaEm.getTime() > limite,
+  // Descarta apenas as leituras fora do período, preservando as válidas do mesmo lote.
+  // O retorno 201 confirma o processamento do lote, inclusive se todas forem descartadas.
+  const { validas, descartadas } = separarLeiturasPorPeriodo(
+    resultado.data.leituras, viagem.iniciadaEm.getTime(), Date.now(),
   );
-  if (foraDoPeriodo) {
-    res.status(400).json({ erro: "Leitura com horário fora do período da viagem" });
+  if (validas.length === 0) {
+    res.status(201).json({ recebidas: 0, descartadas });
     return;
   }
 
   const { count } = await prisma.leituraLocalizacao.createMany({
-    data: leituras.map((l) => ({
+    data: validas.map((l) => ({
       latitude: l.latitude,
       longitude: l.longitude,
       precisaoMetros: l.precisaoMetros ?? null,
@@ -186,5 +182,5 @@ viagemRoutes.post("/:id/leituras", async (req, res) => {
     })),
   });
 
-  res.status(201).json({ recebidas: count });
+  res.status(201).json({ recebidas: count, descartadas });
 });

@@ -59,6 +59,17 @@ describe("Estimativa de posição colaborativa", () => {
     assert.deepEqual(e.dispositivosDescartados, [{ motivo: "PRECISAO_RUIM", quantidade: 1 }]);
   });
 
+  it("leitura ruim recente não apaga uma medida boa anterior do mesmo celular", () => {
+    const e = estimarPosicao([
+      leitura(1, 2, 0, 10, 15),
+      leitura(1, 300, 0, 250, 2),
+      leitura(2, -2, 0, 10, 5),
+    ], AGORA)!;
+    assert.equal(e.dispositivosUsados, 2);
+    assert.ok(erroAteReferencia(e) < 1);
+    assert.deepEqual(e.dispositivosDescartados, [{ motivo: "PRECISAO_RUIM", quantidade: 1 }]);
+  });
+
   it("3 dispositivos, 1 a 500 m dos outros → outlier descartado", () => {
     const e = estimarPosicao([leitura(1, 5, 0, 10), leitura(2, -5, 0, 10), leitura(3, 500, 0, 10)], AGORA)!;
     assert.equal(e.dispositivosUsados, 2);

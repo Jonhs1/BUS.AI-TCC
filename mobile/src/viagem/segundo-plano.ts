@@ -21,6 +21,7 @@ import { CHAVE_TOKEN } from "@/auth/token";
 import { carregarEnderecoSalvo } from "@/config";
 import { cores } from "@/theme";
 import { INTERVALO_MS, MAX_POR_LOTE, type Leitura } from "@/viagem/parametros";
+import { coletaExpirou } from "@/viagem/limite-coleta";
 
 export const TAREFA_LOCALIZACAO = "busai-localizacao";
 
@@ -85,6 +86,10 @@ async function salvarFila(fila: Leitura[]) {
 async function registrarPosicoes(posicoes: Location.LocationObject[]) {
   const estado = await lerEstado();
   if (!estado) return;
+  if (coletaExpirou(estado.iniciadaEmMs)) {
+    await encerrarLocalmente("Coleta interrompida automaticamente após 3 horas. Abra o app para conferir sua viagem.");
+    return;
+  }
   const fila = await lerFila();
   let ultimo = estado.ultimoEnfileiradoMs;
   let precisao = estado.precisaoM;
@@ -120,6 +125,10 @@ export async function enviarFila() {
     const estado = await lerEstado();
     const fila = await lerFila();
     if (!estado || fila.length === 0) return;
+    if (coletaExpirou(estado.iniciadaEmMs)) {
+      await encerrarLocalmente("Coleta interrompida automaticamente após 3 horas.");
+      return;
+    }
 
     const token = await SecureStore.getItemAsync(CHAVE_TOKEN);
     if (!token) {
@@ -131,7 +140,7 @@ export async function enviarFila() {
 
     const lote = fila.slice(0, MAX_POR_LOTE);
     try {
-      const r = await requisitar<{ recebidas: number }>(`/viagens/${estado.viagemId}/leituras`, {
+      const r = await requisitar<{ recebidas: number; descartadas?: number }>(`/viagens/${estado.viagemId}/leituras`, {
         metodo: "POST",
         corpo: { leituras: lote },
         token,
@@ -139,7 +148,7 @@ export async function enviarFila() {
       // Só tira da fila depois que o servidor confirmou. Relê a fila: a tarefa pode ter
       // acrescentado posições no fim enquanto o envio acontecia.
       await salvarFila((await lerFila()).slice(lote.length));
-      await atualizarEstado({ enviadas: estado.enviadas + r.recebidas, ultimoEnvioMs: Date.now(), aviso: null });
+      await atualizarEstado({ enviadas: estado.enviadas + r.recebidas, ultimoEnvioMs: Date.now(), aviso: r.descartadas ? `${r.descartadas} leitura(s) fora do período foram ignoradas.` : null });
     } catch (e) {
       if (e instanceof ErroApi && e.status === 409) {
         // Viagem encerrada ou expirada no servidor (ex.: consentimento revogado no Perfil)
@@ -178,6 +187,11 @@ if (MODO_SEGUNDO_PLANO) {
       await atualizarEstado({ aviso: `GPS: ${error.message}` });
       return;
     }
+    const estado = await lerEstado();
+    if (estado && coletaExpirou(estado.iniciadaEmMs)) {
+      await encerrarLocalmente("Coleta interrompida automaticamente após 3 horas.");
+      return;
+    }
     if (!data?.locations?.length) return;
     await registrarPosicoes(data.locations);
     await enviarFila();
@@ -212,6 +226,9 @@ export async function garantirPermissaoSegundoPlano() {
 
 // Começa a receber posições. manterFila = retomar uma viagem que ficou aberta, sem perder o que não foi enviado.
 export async function iniciarSegundoPlano(viagem: { id: number; iniciadaEm: string }, manterFila = false) {
+  if (coletaExpirou(new Date(viagem.iniciadaEm).getTime())) {
+    throw new Error("Esta viagem já ultrapassou 3 horas. Inicie uma nova viagem.");
+  }
   const salvo = await lerEstado();
   // Estado anterior só é aproveitado se for da mesma viagem
   const anterior = manterFila && salvo && salvo.viagemId === viagem.id ? salvo : null;
@@ -265,6 +282,10 @@ export async function pararSegundoPlanoSeAtivo() {
 
 // O que o cartão "Compartilhando localização" mostra
 export async function lerResumo(): Promise<ResumoColeta> {
+  const anterior = await lerEstado();
+  if (anterior && coletaExpirou(anterior.iniciadaEmMs)) {
+    await encerrarLocalmente("Coleta interrompida automaticamente após 3 horas.");
+  }
   const [estado, fila, ativa] = await Promise.all([
     lerEstado(),
     lerFila(),

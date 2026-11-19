@@ -232,7 +232,15 @@ As funções da análise têm testes automatizados em `src/geolocalizacao/analis
 O teste piloto **não entra** nas métricas de erro nem na comparação entre 1, 2 e 3 aparelhos: ele documenta a
 limitação da coleta com o app fora da tela.
 
-A ocorrência acima mostra que a coleta em segundo plano **não tem fim automático**. O encerramento depende só do
-toque em "Desci do ônibus". Enquanto a correção não for implementada, o procedimento da seção 5.4 é obrigatório:
-conferir, ao final de cada viagem, que nenhum aparelho ficou com a coleta ativa.
+**Atualização após os testes piloto:** a ocorrência de 05/11 reflete uma versão anterior do protótipo.
+Na versão atual, o backend considera a viagem expirada após 180 minutos, filtra leituras de viagens vencidas
+no mapa e registra o encerramento quando a viagem é consultada ou recebe novas leituras. O aplicativo
+também interrompe a coleta local quando detecta que a viagem ultrapassou 180 minutos (na próxima execução
+da tarefa de localização ou ao reabrir o app). **Essa verificação não é um temporizador em tempo real
+garantido com o aplicativo suspenso pelo sistema operacional.** O usuário deve continuar tocando em
+"Desci do ônibus" ao desembarcar e confirmando que o compartilhamento parou.
+
+Na versão endurecida, lotes com leituras de horário inválido preservam as válidas;
+cada resposta informa separadamente quantas foram recebidas e descartadas. Para as
+comparações científicas, registre os descartes como perda de amostras, não como dados medidos.
 

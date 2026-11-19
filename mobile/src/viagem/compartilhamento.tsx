@@ -4,6 +4,7 @@ import { activateKeepAwakeAsync, deactivateKeepAwake } from "expo-keep-awake";
 import { ErroApi } from "@/api/cliente";
 import { useSessao } from "@/auth/sessao";
 import { INTERVALO_MS, MAX_POR_LOTE, type Leitura } from "@/viagem/parametros";
+import { coletaExpirou } from "@/viagem/limite-coleta";
 import {
   garantirPermissaoSegundoPlano,
   iniciarSegundoPlano,
@@ -153,7 +154,7 @@ export function ProvedorViagem({ children }: { children: ReactNode }) {
     enviando.current = true;
     const lote = fila.current.slice(0, MAX_POR_LOTE);
     try {
-      const r = await api<{ recebidas: number }>(`/viagens/${v.id}/leituras`, {
+      const r = await api<{ recebidas: number; descartadas?: number }>(`/viagens/${v.id}/leituras`, {
         metodo: "POST",
         corpo: { leituras: lote },
       });
@@ -161,7 +162,7 @@ export function ProvedorViagem({ children }: { children: ReactNode }) {
       fila.current = fila.current.slice(lote.length);
       setEnviadas((n) => n + r.recebidas);
       setUltimoEnvio(new Date());
-      setAviso(null);
+      setAviso(r.descartadas ? `${r.descartadas} leitura(s) fora do período foram ignoradas.` : null);
     } catch (e) {
       if (e instanceof ErroApi && e.status === 409) {
         // Viagem encerrada ou expirada no servidor (ex.: consentimento revogado no Perfil)
@@ -209,6 +210,15 @@ export function ProvedorViagem({ children }: { children: ReactNode }) {
 
     // A cada intervalo: garante uma medida nova, coloca na fila e tenta enviar
     temporizador.current = setInterval(async () => {
+      const atual = viagemRef.current;
+      if (atual && coletaExpirou(new Date(atual.iniciadaEm).getTime())) {
+        pararColeta();
+        definirViagem(null);
+        fila.current = [];
+        setNaFila(0);
+        setAviso("Coleta interrompida automaticamente após 3 horas. Inicie uma nova viagem.");
+        return;
+      }
       const semNovidade = !ultimaLeitura.current || ultimaLeitura.current.registradaEm <= ultimoEnfileirado.current;
       if (semNovidade) {
         // Parado, o celular pode não gerar posição nova sozinho: pede uma medição agora
@@ -256,6 +266,12 @@ export function ProvedorViagem({ children }: { children: ReactNode }) {
       await garantirPermissaoSegundoPlano();
       await iniciarSegundoPlano(v, true); // mantém o que ainda não foi enviado
       setColetando(true);
+      return;
+    }
+    const v = viagemRef.current;
+    if (v && coletaExpirou(new Date(v.iniciadaEm).getTime())) {
+      definirViagem(null);
+      setAviso("Esta viagem expirou após 3 horas. Inicie uma nova.");
       return;
     }
     await garantirPermissao();
