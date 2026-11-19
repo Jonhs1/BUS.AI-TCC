@@ -131,7 +131,7 @@ export async function enviarFila() {
 
     const lote = fila.slice(0, MAX_POR_LOTE);
     try {
-      const r = await requisitar<{ recebidas: number }>(`/viagens/${estado.viagemId}/leituras`, {
+      const r = await requisitar<{ recebidas: number; descartadas?: number }>(`/viagens/${estado.viagemId}/leituras`, {
         metodo: "POST",
         corpo: { leituras: lote },
         token,
@@ -139,7 +139,7 @@ export async function enviarFila() {
       // Só tira da fila depois que o servidor confirmou. Relê a fila: a tarefa pode ter
       // acrescentado posições no fim enquanto o envio acontecia.
       await salvarFila((await lerFila()).slice(lote.length));
-      await atualizarEstado({ enviadas: estado.enviadas + r.recebidas, ultimoEnvioMs: Date.now(), aviso: null });
+      await atualizarEstado({ enviadas: estado.enviadas + r.recebidas, ultimoEnvioMs: Date.now(), aviso: r.descartadas ? `${r.descartadas} leitura(s) fora do período foram ignoradas.` : null });
     } catch (e) {
       if (e instanceof ErroApi && e.status === 409) {
         // Viagem encerrada ou expirada no servidor (ex.: consentimento revogado no Perfil)
