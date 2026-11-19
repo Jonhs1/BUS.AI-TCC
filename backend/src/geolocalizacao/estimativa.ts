@@ -42,21 +42,23 @@ export function estimarPosicao(leituras: LeituraParaEstimativa[], agoraMs: numbe
     (l) => l.registradaEmMs >= agoraMs - JANELA_SEGUNDOS * 1000 && l.registradaEmMs <= agoraMs + 60_000,
   );
 
-  // PASSO 2: a leitura mais recente de cada dispositivo (cada celular conta uma vez)
-  const porDispositivo = new Map<number, LeituraParaEstimativa>();
-  for (const l of recentes) {
-    const atual = porDispositivo.get(l.dispositivoId);
-    if (!atual || l.registradaEmMs > atual.registradaEmMs) porDispositivo.set(l.dispositivoId, l);
-  }
-
+  // PASSO 2: primeiro descarta leituras de precisão ruim.
+  // Assim uma leitura imprecisa recém-chegada não esconde uma medida boa,
+  // ainda recente, do mesmo dispositivo.
   const descartes: Record<MotivoDescarte, number> = { PRECISAO_RUIM: 0, OUTLIER: 0, DIVERGENCIA: 0 };
-
-  // PASSO 3: descarta leituras com precisão ruim
-  let candidatas = [...porDispositivo.values()].filter((l) => {
+  const precisas = recentes.filter((l) => {
     const ok = precisaoDe(l) <= PRECISAO_MAXIMA_M;
     if (!ok) descartes.PRECISAO_RUIM++;
     return ok;
   });
+
+  // PASSO 3: cada aparelho conta uma vez, com sua leitura válida mais recente.
+  const porDispositivo = new Map<number, LeituraParaEstimativa>();
+  for (const l of precisas) {
+    const atual = porDispositivo.get(l.dispositivoId);
+    if (!atual || l.registradaEmMs > atual.registradaEmMs) porDispositivo.set(l.dispositivoId, l);
+  }
+  let candidatas = [...porDispositivo.values()];
 
   if (candidatas.length === 0) return null;
 
