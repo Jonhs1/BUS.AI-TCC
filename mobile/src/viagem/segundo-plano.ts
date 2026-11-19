@@ -202,11 +202,13 @@ if (MODO_SEGUNDO_PLANO) {
 
 // Pede "Permitir o tempo todo". No Android 11+ o sistema abre a tela de Configurações,
 // então o app explica antes o que o aluno precisa escolher.
-export async function garantirPermissaoSegundoPlano() {
+// Retorna false quando o usuário não autorizou "Permitir o tempo todo".
+// Nesse caso o aplicativo ainda pode compartilhar com a tela ligada.
+export async function garantirPermissaoSegundoPlano(): Promise<boolean> {
   const primeiro = await Location.requestForegroundPermissionsAsync();
   if (!primeiro.granted) throw new Error("Sem permissão de localização. Libere nas Configurações do celular.");
 
-  if ((await Location.getBackgroundPermissionsAsync()).granted) return;
+  if ((await Location.getBackgroundPermissionsAsync()).granted) return true;
 
   await new Promise<void>((continuar) =>
     Alert.alert(
@@ -219,9 +221,7 @@ export async function garantirPermissaoSegundoPlano() {
   );
 
   const segundo = await Location.requestBackgroundPermissionsAsync();
-  if (!segundo.granted) {
-    throw new Error("Escolha “Permitir o tempo todo” na localização do BUS.AI, nas Configurações do celular.");
-  }
+  return segundo.granted;
 }
 
 // Começa a receber posições. manterFila = retomar uma viagem que ficou aberta, sem perder o que não foi enviado.
