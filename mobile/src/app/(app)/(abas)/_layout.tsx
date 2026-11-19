@@ -17,6 +17,10 @@ export default function LayoutAbas() {
         <NativeTabs.Trigger.Icon sf={{ default: "map", selected: "map.fill" }} md="map" />
         <NativeTabs.Trigger.Label>Mapa</NativeTabs.Trigger.Label>
       </NativeTabs.Trigger>
+      <NativeTabs.Trigger name="assistente">
+        <NativeTabs.Trigger.Icon sf="sparkles" md="auto_awesome" />
+        <NativeTabs.Trigger.Label>IA</NativeTabs.Trigger.Label>
+      </NativeTabs.Trigger>
       <NativeTabs.Trigger name="perfil">
         <NativeTabs.Trigger.Icon sf={{ default: "person", selected: "person.fill" }} md="person" />
         <NativeTabs.Trigger.Label>Perfil</NativeTabs.Trigger.Label>
