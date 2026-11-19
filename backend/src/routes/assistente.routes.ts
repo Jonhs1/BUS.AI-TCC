@@ -1,9 +1,13 @@
 import { Router } from "express";
+import { fileURLToPath } from "node:url";
+import { LimitadorIA } from "../ia/limites";
 import { z } from "zod";
 import { prisma } from "../lib/prisma";
 import { autenticar } from "../middlewares/autenticar";
 import { agoraEmSaoPaulo, minutosParaHora } from "../lib/horario";
 import { recomendar } from "../recomendacao/motor";
+
+const limitador = new LimitadorIA(fileURLToPath(new URL("../../.cache/limites-ia.json", import.meta.url)));
 
 export const assistenteRoutes = Router();
 assistenteRoutes.use(autenticar);
@@ -12,23 +16,6 @@ const entradaSchema = z.discriminatedUnion("modo", [
   z.object({ modo: z.literal("decidir"), pergunta: z.string().trim().min(3).max(700) }),
   z.object({ modo: z.literal("estudar"), pergunta: z.string().trim().min(3).max(700), conteudo: z.string().trim().max(6000).optional() }),
 ]);
-
-// Limite simples por usuário/instância para evitar consumo acidental de API em demonstrações.
-const chamadas = new Map<number, { inicio: number; quantidade: number }>();
-function podeConsultar(usuarioId: number): boolean {
-  const agora = Date.now();
-  if (chamadas.size > 1000) {
-    for (const [id, estado] of chamadas) if (agora - estado.inicio > 15 * 60_000) chamadas.delete(id);
-  }
-  const estado = chamadas.get(usuarioId);
-  if (!estado || agora - estado.inicio > 15 * 60_000) {
-    chamadas.set(usuarioId, { inicio: agora, quantidade: 1 });
-    return true;
-  }
-  if (estado.quantidade >= 10) return false;
-  estado.quantidade++;
-  return true;
-}
 
 async function contextoDeDecisao(usuarioId: number) {
   const agora = agoraEmSaoPaulo();
@@ -72,6 +59,10 @@ assistenteRoutes.post("/", async (req, res) => {
     res.status(400).json({ erro: "Informe o modo e uma pergunta válida (até 700 caracteres)." });
     return;
   }
+  if (process.env.ASSISTENTE_IA_HABILITADO !== "true") {
+    res.status(503).json({ erro: "Assistente IA desabilitado no servidor. Configure ASSISTENTE_IA_HABILITADO=true após conferir o plano gratuito." });
+    return;
+  }
   const chave = process.env.GEMINI_API_KEY;
   if (!chave) {
     res.status(503).json({ erro: "Assistente IA ainda não configurado no servidor." });
@@ -79,11 +70,6 @@ assistenteRoutes.post("/", async (req, res) => {
   }
 
   const usuarioId: number = res.locals.usuarioId;
-  if (!podeConsultar(usuarioId)) {
-    res.status(429).json({ erro: "Limite de 10 consultas a cada 15 minutos atingido. Tente depois." });
-    return;
-  }
-
   const { modo, pergunta } = entrada.data;
   let instrucao: string;
   try {
@@ -118,6 +104,20 @@ assistenteRoutes.post("/", async (req, res) => {
       ].join("\n");
     }
 
+    let reserva: ReturnType<LimitadorIA["reservar"]>;
+    try {
+      reserva = limitador.reservar(usuarioId);
+    } catch (erro) {
+      console.error("Falha ao registrar cota local da IA:", erro instanceof Error ? erro.message : "Desconhecido");
+      res.status(503).json({ erro: "O controle de uso da IA não está disponível. Nenhuma consulta externa foi enviada." });
+      return;
+    }
+    if (!reserva.permitido) {
+      res.status(429).json({ erro: reserva.motivo });
+      return;
+    }
+
+    try {
     const controlador = new AbortController();
     const timeout = setTimeout(() => controlador.abort(), 50_000);
     let resposta: Response;
@@ -140,6 +140,10 @@ assistenteRoutes.post("/", async (req, res) => {
       clearTimeout(timeout);
     }
 
+    if (resposta.status === 429) {
+      res.status(429).json({ erro: "A cota gratuita do Gemini foi atingida. A IA está temporariamente indisponível." });
+      return;
+    }
     if (!resposta.ok) {
       // Não repassar corpo do fornecedor, URL ou credenciais ao cliente.
       console.error("Gemini indisponível: HTTP", resposta.status);
@@ -155,6 +159,9 @@ assistenteRoutes.post("/", async (req, res) => {
       return;
     }
     res.json({ resposta: texto, modo });
+    } finally {
+      reserva.liberar();
+    }
   } catch (erro) {
     console.error("Assistente IA:", erro instanceof Error ? erro.message : "Erro desconhecido");
     res.status(502).json({ erro: "Não foi possível consultar a IA. Tente novamente." });
