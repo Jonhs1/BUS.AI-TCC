@@ -25,6 +25,10 @@ Teste de conexão: `GET /health` → `{ "status": "ok", "servico": "BUS.AI backe
 
 ---
 
+**Proteção:** o servidor aplica limites de tentativas de cadastro e login, retornando `429` após excesso.
+No backend de demonstração, esse controle é local à instância e pode afetar vários clientes que
+cheguem pelo mesmo túnel; não substitui um controle distribuído para produção.
+
 ## 2. Autenticação (JWT)
 
 Rotas marcadas com 🔒 exigem o cabeçalho:
@@ -277,6 +281,14 @@ Mapeamento direto do **Expo Location** (`LocationObject`):
 | `404` | Viagem não encontrada (ou é de outro usuário) |
 | `409` | Viagem já encerrada ou expirada → o app deve parar de enviar |
 
+**Lotes parcialmente válidos:** leituras fora do período são descartadas individualmente, sem descartar as válidas.
+Uma requisição bem formada pode retornar `201` com `{ "recebidas": 2, "descartadas": 1 }` ou
+`{ "recebidas": 0, "descartadas": 3 }`. O cliente deve remover o lote já processado da fila e
+informar os descartes. `400` permanece reservado a erro na estrutura ou tipos dos dados.
+
+**Prazo:** cada viagem expira após três horas; o servidor bloqueia novas leituras em viagens
+vencidas. A parada local da coleta depende da próxima execução da tarefa ou da abertura do app.
+
 **Recomendações para o app:**
 
 - **Sem internet** (comum na estrada): guardar as leituras numa fila local e enviar o lote quando a conexão voltar.
@@ -311,3 +323,26 @@ Sem corpo. Resposta: `200` com a viagem encerrada (chamar de novo não dá erro)
 - [x] Acesso fora da rede Wi-Fi de casa: túnel da Cloudflare (`cloudflared tunnel --url http://localhost:3333`).
   O endereço muda a cada reinício; no app ele fica em `mobile/.env.local`.
 - [x] Intervalo de envio das leituras nos testes de campo: **5 segundos** (`INTERVALO_ENVIO_S` no app).
+
+---
+
+## Assistente Gemini (funcionalidade opcional) 🔒
+
+### `POST /assistente`
+
+Requer JWT e `ASSISTENTE_IA_HABILITADO=true` no backend, com `GEMINI_API_KEY` privada.
+
+Modo de decisão: `{ "modo": "decidir", "pergunta": "O que fazer antes da aula?" }`.
+O servidor usa compromissos e opções calculadas pelo motor de regras. Não usa geolocalização em tempo real.
+
+Modo de estudo: `{ "modo": "estudar", "pergunta": "Explique normalização", "conteudo": "Texto opcional" }`.
+O conteúdo opcional tem limite de 6.000 caracteres; a pergunta, 700.
+
+Resposta: `{ "modo": "estudar", "resposta": "Texto gerado pela IA..." }`.
+A IA pode errar. A aplicação não salva o histórico das perguntas no banco.
+
+Códigos de erro relevantes: `400` (dados inválidos), `401` (sem login), `429` (cota local ou
+externa), `502` (falha da API externa), `503` (IA desligada/sem chave).
+
+Para cotas, privacidade e condições do Free Tier, consulte
+[`assistente-ia-limites.md`](assistente-ia-limites.md).
