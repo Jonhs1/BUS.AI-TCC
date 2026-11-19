@@ -4,6 +4,12 @@ import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import { z } from "zod";
 import { prisma } from "../lib/prisma";
+import { LimitadorTentativas } from "../lib/limite-tentativas";
+
+// Instância local (o túnel passa por um único backend). Não é proteção distribuída.
+const limiteCadastro = new LimitadorTentativas(10, 60 * 60_000);
+const limiteLoginIP = new LimitadorTentativas(30, 15 * 60_000);
+const limiteLoginConta = new LimitadorTentativas(7, 15 * 60_000);
 
 
 export const authRoutes = Router();
@@ -24,6 +30,10 @@ const loginSchema = z.object({
 
 // POST /auth/cadastro
 authRoutes.post("/cadastro", async (req, res) => {
+  if (!limiteCadastro.permitir(req.ip ?? "desconhecido")) {
+    res.status(429).json({ erro: "Muitas tentativas de cadastro. Aguarde antes de tentar novamente." });
+    return;
+  }
   const resultado = cadastroSchema.safeParse(req.body);
   if (!resultado.success) {
     res.status(400).json(errosDeValidacao(resultado.error));
@@ -51,6 +61,14 @@ authRoutes.post("/cadastro", async (req, res) => {
 
 // POST /auth/login
 authRoutes.post("/login", async (req, res) => {
+  // Limite por conexão e e-mail: impede tentativas repetidas para a mesma conta.
+  // Um túnel pode apresentar o mesmo IP para vários alunos; o teto geral é conservador.
+  const emailTentado = typeof req.body?.email === "string" ? req.body.email.trim().toLowerCase().slice(0, 254) : "";
+  if (!limiteLoginIP.permitir(req.ip ?? "desconhecido") ||
+      !limiteLoginConta.permitir(emailTentado || "(email-ausente)")) {
+    res.status(429).json({ erro: "Muitas tentativas de login. Aguarde 15 minutos e tente novamente." });
+    return;
+  }
   const resultado = loginSchema.safeParse(req.body);
   if (!resultado.success) {
     res.status(400).json(errosDeValidacao(resultado.error));
