@@ -10,6 +10,7 @@
       "supportsTablet": true
     },
     "android": {
+      "softwareKeyboardLayoutMode": "resize",
       "package": "com.kothds.busai",
       "adaptiveIcon": {
         "backgroundColor": "#E6F4FE",
