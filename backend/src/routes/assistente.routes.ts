@@ -69,6 +69,14 @@ assistenteRoutes.post("/", async (req, res) => {
     return;
   }
 
+  // Não permita escolher outro modelo apenas pela configuração local:
+  // modelos sem Free Tier podem requerer faturamento.
+  const modelo = process.env.GEMINI_MODEL || "gemini-2.5-flash";
+  if (modelo !== "gemini-2.5-flash") {
+    res.status(503).json({ erro: "Modelo não autorizado para esta configuração gratuita do BUS.AI." });
+    return;
+  }
+
   const usuarioId: number = res.locals.usuarioId;
   const { modo, pergunta } = entrada.data;
   let instrucao: string;
@@ -124,7 +132,7 @@ assistenteRoutes.post("/", async (req, res) => {
     try {
       resposta = await fetch(
         "https://generativelanguage.googleapis.com/v1beta/models/" +
-          encodeURIComponent(process.env.GEMINI_MODEL || "gemini-2.5-flash") + ":generateContent",
+          encodeURIComponent(modelo) + ":generateContent",
         {
           method: "POST",
           signal: controlador.signal,
